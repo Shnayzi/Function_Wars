@@ -1,0 +1,7 @@
+<Solution>
+  <Configurations>
+    <Platform Name="x64" />
+    <Platform Name="x86" />
+  </Configurations>
+  <Project Path="Function_Wars/Function_Wars.vcxproj" Id="fd8b59c0-8a0b-4aa2-9fec-829492566b91" />
+</Solution>
