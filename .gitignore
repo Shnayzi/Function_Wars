@@ -1,1 +1,28 @@
+# ==========================================
+# 1. Pastas e arquivos internos do Visual Studio
+# ==========================================
+.vs/
+*.user
+*.suo
 
+# ==========================================
+# 2. Saídas de compilação (Build / Executáveis)
+# ==========================================
+# Pastas onde o Visual Studio compila seu jogo
+Debug/
+Release/
+x64/
+x86/
+
+# Arquivos executáveis e objetos intermediários
+*.exe
+*.obj
+*.o
+*.pdb
+*.ilk
+
+# ==========================================
+# 3. Logs e temporários
+# ==========================================
+*.log
+*.tlog
