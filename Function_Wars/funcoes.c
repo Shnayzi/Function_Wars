@@ -1,0 +1,1 @@
+// criar as funcoes que serao utilizadas no programa principal
