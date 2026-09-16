@@ -154,6 +154,7 @@
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClCompile Include="funcoes.c" />
+    <ClCompile Include="telaFase1.c" />
     <ClCompile Include="telaJogo.c" />
     <ClCompile Include="main.c" />
     <ClCompile Include="telaMenu.c" />
