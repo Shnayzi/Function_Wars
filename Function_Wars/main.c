@@ -4,7 +4,10 @@
 #include <allegro5/keyboard.h>
 
 // largura do sprite do mago: 424 / 4 = 106
-// altura do sprite do mago: 632 / 4 = 158
+// altura do sprite do mago: 636 / 4 = 159
+
+//exemplo so de como usar o allegro para criar uma janela e desenhar um sprite animado
+//o main será onde vamos reunir todas as funcoes que vamos criar para o jogo, como a tela de menu, a tela de jogo, etc.
 
 int main() {
     al_init();
@@ -20,7 +23,7 @@ int main() {
     ALLEGRO_TIMER* timer = al_create_timer(1.0 / 30.0);
 
     ALLEGRO_BITMAP* mage = al_load_bitmap("./mage_spritesheet.png");
-	ALLEGRO_BITMAP* background1 = al_load_bitmap("./background1.png");
+    ALLEGRO_BITMAP* background1 = al_load_bitmap("./background1.png");
 
     ALLEGRO_EVENT_QUEUE* event_queue = al_create_event_queue();
     al_register_event_source(event_queue, al_get_display_event_source(display));
@@ -52,7 +55,7 @@ int main() {
             bool moving = false;
 
             if (keys[ALLEGRO_KEY_UP]) {
-                current_frame_y = 158 * 3;
+                current_frame_y = 159 * 3;
                 pos_y -= 5;
                 moving = true;
             }
@@ -62,19 +65,19 @@ int main() {
                 moving = true;
             }
             if (keys[ALLEGRO_KEY_LEFT]) {
-                current_frame_y = 158;
+                current_frame_y = 159;
                 pos_x -= 5;
                 moving = true;
             }
             if (keys[ALLEGRO_KEY_RIGHT]) {
-                current_frame_y = 158 * 2;
+                current_frame_y = 159 * 2;
                 pos_x += 5;
                 moving = true;
             }
 
             if (moving) {
                 frame += 0.2f;
-                if (frame >= 4.0f) { 
+                if (frame >= 4.0f) {
                     frame -= 4.0f;
                 }
             }
@@ -90,7 +93,7 @@ int main() {
 
             al_clear_to_color(al_map_rgb(255, 255, 255));
             al_draw_bitmap(background1, 0, 0, 0);
-            al_draw_bitmap_region(mage, 106 * (int)frame, current_frame_y, 106, 158, pos_x, pos_y, 0);
+            al_draw_bitmap_region(mage, 106 * (int)frame, current_frame_y, 106, 159, pos_x, pos_y, 0);
             al_draw_text(font, al_map_rgb(0, 0, 0), 5, 5, 0, "Function Wars");
             al_flip_display();
         }

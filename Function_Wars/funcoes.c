@@ -1,1 +1,1 @@
-// criar as funcoes que serao utilizadas no programa principal
+// criar as funcoes que serao utilizadas no programa principal (linear, quadratica, exponencial, etc)
