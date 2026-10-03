@@ -1,1 +1,0 @@
-//tela da primeira fase do jogo (funcoes lineares)
