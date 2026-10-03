@@ -169,6 +169,11 @@
     <ClInclude Include="telaMenu.h" />
     <ClInclude Include="telaTutorial.h" />
   </ItemGroup>
+  <ItemGroup>
+    <Image Include="..\..\Function_Wars\Function_Wars\alvo.png" />
+    <Image Include="..\..\Function_Wars\Function_Wars\background1.png" />
+    <Image Include="..\..\Function_Wars\Function_Wars\mage_spritesheet.png" />
+  </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">
     <Import Project="..\packages\AllegroDeps.1.16.0\build\native\AllegroDeps.targets" Condition="Exists('..\packages\AllegroDeps.1.16.0\build\native\AllegroDeps.targets')" />

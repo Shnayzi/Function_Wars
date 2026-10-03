@@ -51,4 +51,15 @@
       <Filter>Arquivos de Cabeçalho</Filter>
     </ClInclude>
   </ItemGroup>
+  <ItemGroup>
+    <Image Include="..\..\Function_Wars\Function_Wars\background1.png">
+      <Filter>Arquivos de Recurso</Filter>
+    </Image>
+    <Image Include="..\..\Function_Wars\Function_Wars\mage_spritesheet.png">
+      <Filter>Arquivos de Recurso</Filter>
+    </Image>
+    <Image Include="..\..\Function_Wars\Function_Wars\alvo.png">
+      <Filter>Arquivos de Recurso</Filter>
+    </Image>
+  </ItemGroup>
 </Project>
