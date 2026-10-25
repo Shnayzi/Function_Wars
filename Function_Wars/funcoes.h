@@ -3,7 +3,6 @@
 
 #include <allegro5/allegro.h>
 #include <allegro5/allegro_primitives.h>
-#include <math.h>
 
 typedef enum {
     FUNCAO_LINEAR,
@@ -21,7 +20,12 @@ typedef struct {
 
 float calcular_y(float x, ParametrosFuncao f);
 
-void desenhar_trajetoria(float origem_x, float origem_y, float alcance_max,
-    ParametrosFuncao f, ALLEGRO_COLOR cor);
+void desenhar_trajetoria(
+    float origem_x,
+    float origem_y,
+    float alcance_max,
+    ParametrosFuncao f,
+    ALLEGRO_COLOR cor
+);
 
 #endif
