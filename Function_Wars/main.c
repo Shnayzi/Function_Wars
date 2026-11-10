@@ -53,9 +53,12 @@
 /*  ESTRUTURAS E ESTADOS */
 typedef enum
 {
+    TELA_INICIAL,
+    TELA_TUTORIAL,
     TELA_ESCOLHA_FUNCAO,
     TELA_PARAMETROS,
-    TELA_JOGO
+    TELA_JOGO,
+    TELA_PAUSA
 } EstadoJogo;
 
 typedef struct
@@ -68,13 +71,56 @@ typedef struct
 } Projetil;
 
 /*  FUNCOES AUXILIARES */
-static bool checar_colisao(float x1, float y1, float r1,
-    float x2, float y2, float r2)
+/* Evita que o projetil atravesse o alvo entre dois frames (tunelamento). */
+static bool colisao_segmento_circulo(float x1, float y1, float x2, float y2,
+    float cx, float cy, float raio)
 {
-    float dx = x1 - x2;
-    float dy = y1 - y2;
+    float dx = x2 - x1, dy = y2 - y1;
+    float comprimento2 = dx * dx + dy * dy;
+    float t = 0.0f;
+    if (comprimento2 > 0.0001f)
+        t = ((cx - x1) * dx + (cy - y1) * dy) / comprimento2;
+    if (t < 0.0f) t = 0.0f;
+    if (t > 1.0f) t = 1.0f;
+    float px = x1 + t * dx, py = y1 + t * dy;
+    float ex = cx - px, ey = cy - py;
+    return ex * ex + ey * ey <= raio * raio;
+}
 
-    return dx * dx + dy * dy < (r1 + r2) * (r1 + r2);
+static bool campo_usado(TipoFuncao tipo, int campo)
+{
+    if (campo == 0) return true;
+    if (tipo == FUNCAO_EXPONENCIAL) return false;
+    if (tipo == FUNCAO_LINEAR && campo == 2) return false;
+    return true;
+}
+
+static int proximo_campo(TipoFuncao tipo, int atual)
+{
+    for (int i = 1; i <= 3; ++i) {
+        int candidato = (atual + i) % 3;
+        if (campo_usado(tipo, candidato)) return candidato;
+    }
+    return 0;
+}
+
+static bool converter_float(const char* texto, float* valor);
+
+static bool montar_previa(TipoFuncao tipo, char entradas[3][32], ParametrosFuncao* f)
+{
+    float* destino[3] = { &f->a, &f->b, &f->c };
+    f->tipo = tipo; f->a = f->b = f->c = 0.0f;
+    bool algum_preenchido = false;
+    for (int i = 0; i < 3; ++i) {
+        if (!campo_usado(tipo, i)) continue;
+        if (entradas[i][0] == '\0') {
+            *destino[i] = 0.0f; /* preview parcial enquanto o jogador digita */
+            continue;
+        }
+        if (!converter_float(entradas[i], destino[i])) return false;
+        algum_preenchido = true;
+    }
+    return algum_preenchido;
 }
 
 static void resetar_projetil(Projetil* p)
@@ -96,7 +142,7 @@ static const char* nome_funcao(TipoFuncao tipo)
     case FUNCAO_QUADRATICA:
         return "Quadratica";
 
-    case FUNCAO_LOGARITMICA:
+    case FUNCAO_EXPONENCIAL:
         return "Exponencial";
 
     case FUNCAO_TRIGONOMETRICA:
@@ -117,11 +163,11 @@ static const char* formula_funcao(TipoFuncao tipo)
     case FUNCAO_QUADRATICA:
         return "y = ax^2 + bx + c";
 
-    case FUNCAO_LOGARITMICA:
+    case FUNCAO_EXPONENCIAL:
         return "y = a^x";
 
     case FUNCAO_TRIGONOMETRICA:
-        return "y = a sen(x) + b";
+        return "y = a sen(bx) + c";
 
     default:
         return "";
@@ -130,6 +176,8 @@ static const char* formula_funcao(TipoFuncao tipo)
 
 static void adicionar_caractere(char* texto, size_t capacidade, int unichar)
 {
+    if (unichar < 0 || unichar > 127)
+        return;
     char c = (char)unichar;
     size_t tamanho = strlen(texto);
 
@@ -275,45 +323,7 @@ static void desenhar_placa(
     float x2,
     float y2)
 {
-    float c1 = x1 + 55;
-    float c2 = x2 - 55;
-
-    al_draw_line(
-        c1,
-        0,
-        c1,
-        y1 + 4,
-        COR_CORDA,
-        4.0f
-    );
-
-    al_draw_line(
-        c2,
-        0,
-        c2,
-        y1 + 4,
-        COR_CORDA,
-        4.0f
-    );
-
-    al_draw_line(
-        c1,
-        0,
-        c1,
-        y1 + 4,
-        al_map_rgb(150, 120, 70),
-        1.0f
-    );
-
-    al_draw_line(
-        c2,
-        0,
-        c2,
-        y1 + 4,
-        al_map_rgb(150, 120, 70),
-        1.0f
-    );
-
+    /* Placa limpa: sem cordas/palitos saindo do topo. */
     al_draw_filled_rounded_rectangle(
         x1 + 6,
         y1 + 6,
@@ -415,6 +425,20 @@ static void texto_com_sombra(
     );
 }
 
+/* Carrega primeiro ao lado do executavel; usa caminho relativo como fallback. */
+static ALLEGRO_BITMAP* carregar_bitmap_recurso(const char* nome)
+{
+    ALLEGRO_PATH* caminho = al_get_standard_path(ALLEGRO_RESOURCES_PATH);
+    ALLEGRO_BITMAP* bitmap = NULL;
+    if (caminho) {
+        al_append_path_component(caminho, nome);
+        bitmap = al_load_bitmap(al_path_cstr(caminho, ALLEGRO_NATIVE_PATH_SEP));
+        al_destroy_path(caminho);
+    }
+    if (!bitmap) bitmap = al_load_bitmap(nome);
+    return bitmap;
+}
+
 /* BACKGROUND */
 static void desenhar_fundo(ALLEGRO_BITMAP* background)
 {
@@ -444,7 +468,7 @@ static void desenhar_menu_escolha(ALLEGRO_FONT* font)
     {
         FUNCAO_LINEAR,
         FUNCAO_QUADRATICA,
-        FUNCAO_LOGARITMICA,
+        FUNCAO_EXPONENCIAL,
         FUNCAO_TRIGONOMETRICA
     };
 
@@ -616,32 +640,17 @@ static void desenhar_menu_parametros(
             );
         }
 
-        desenhar_medalhao(
-            font,
-            62,
-            y1 + 19,
-            letras[i]
-        );
+        desenhar_medalhao(font, 62, y1 + 19, letras[i]);
 
-        al_draw_text(
-            font,
-            COR_TEXTO,
-            86,
-            y1 + 6,
-            0,
-            rotulos[i]
-        );
-
-        al_draw_textf(
-            font,
-            COR_FORMULA,
-            86,
-            y1 + 21,
-            0,
-            "%s%s",
-            entradas[i],
-            i == campo ? "_" : ""
-        );
+        if (!campo_usado(tipo, i)) {
+            al_draw_text(font, al_map_rgb(110, 90, 70), 86, y1 + 12, 0,
+                "Nao utilizado nesta funcao");
+        }
+        else {
+            al_draw_text(font, COR_TEXTO, 86, y1 + 6, 0, rotulos[i]);
+            al_draw_textf(font, COR_FORMULA, 86, y1 + 21, 0, "%s%s",
+                entradas[i], i == campo ? "_" : "");
+        }
     }
 
     texto_com_sombra(
@@ -883,6 +892,158 @@ static void desenhar_trajetoria_atual(
     );
 }
 
+static void desenhar_tela_inicial(ALLEGRO_FONT* font, ALLEGRO_BITMAP* mage, float frame)
+{
+    /*
+     * Tela inicial:
+     * - titulo grande no topo;
+     * - mago no lado esquerdo, apoiado no chao;
+     * - placas no lado direito;
+     * - placas sem cordas/palitos.
+     */
+
+     /* =========================================================
+        TITULO PRINCIPAL
+        ========================================================= */
+    {
+        ALLEGRO_TRANSFORM transformacao;
+        al_identity_transform(&transformacao);
+
+        /*
+         * O fonte builtin do Allegro e pequeno, entao usamos uma
+         * escala para deixar o titulo realmente com cara de titulo.
+         */
+        al_scale_transform(&transformacao, 4.5f, 4.5f);
+        al_use_transform(&transformacao);
+
+        /* UM UNICO FUNCTION WARS - sem sombra duplicada */
+        al_draw_text(
+            font,
+            al_map_rgb(255, 220, 125),
+            142.2f,
+            5.0f,
+            ALLEGRO_ALIGN_CENTER,
+            "FUNCTION WARS"
+        );
+
+        /* Volta ao sistema de coordenadas normal. */
+        al_identity_transform(&transformacao);
+        al_use_transform(&transformacao);
+    }
+
+    /* Subtitulo abaixo do titulo. */
+    texto_com_sombra(
+        font,
+        640,
+        70,
+        ALLEGRO_ALIGN_CENTER,
+        "A magia da matematica esta em suas maos"
+    );
+
+    /* =========================================================
+       PLACAS DO MENU - lado direito e SEM cordas/palitos
+       ========================================================= */
+    desenhar_placa(690, 205, 1235, 315);
+    desenhar_placa(720, 365, 1205, 465);
+    desenhar_placa(795, 520, 1140, 605);
+
+    /* =========================================================
+       TEXTO DAS PLACAS
+       ========================================================= */
+    texto_com_sombra(
+        font,
+        962,
+        248,
+        ALLEGRO_ALIGN_CENTER,
+        "JOGAR"
+    );
+
+    texto_com_sombra(
+        font,
+        962,
+        280,
+        ALLEGRO_ALIGN_CENTER,
+        "ENTER  -  iniciar aventura"
+    );
+
+    texto_com_sombra(
+        font,
+        962,
+        403,
+        ALLEGRO_ALIGN_CENTER,
+        "COMO JOGAR"
+    );
+
+    texto_com_sombra(
+        font,
+        962,
+        435,
+        ALLEGRO_ALIGN_CENTER,
+        "T  -  ver instrucoes"
+    );
+
+    texto_com_sombra(
+        font,
+        967,
+        553,
+        ALLEGRO_ALIGN_CENTER,
+        "SAIR  -  ESC"
+    );
+
+    /* =========================================================
+       MAGO - lado esquerdo, com os pes alinhados ao chao
+       ========================================================= */
+    if (mage)
+    {
+        int quadro = (int)frame % MAGO_FRAMES;
+
+        al_draw_scaled_bitmap(
+            mage,
+            quadro * MAGO_FRAME_LARGURA,
+            0,
+            MAGO_FRAME_LARGURA,
+            MAGO_FRAME_ALTURA,
+            35,
+            183,
+            520,
+            417,
+            0
+        );
+    }
+    else
+    {
+        texto_com_sombra(
+            font,
+            295,
+            390,
+            ALLEGRO_ALIGN_CENTER,
+            "SPRITE DO MAGO"
+        );
+    }
+}
+
+static void desenhar_tela_tutorial(ALLEGRO_FONT* font)
+{
+    desenhar_placa(250, 115, 1030, 610);
+    texto_com_sombra(font, 640, 145, ALLEGRO_ALIGN_CENTER, "COMO JOGAR");
+    texto_com_sombra(font, 300, 220, 0, "1. Escolha uma funcao matematica (teclas 1 a 4).");
+    texto_com_sombra(font, 300, 275, 0, "2. Digite os coeficientes pedidos. Campos desnecessarios ficam desativados.");
+    texto_com_sombra(font, 300, 330, 0, "3. A curva mostra a trajetoria prevista antes de confirmar.");
+    texto_com_sombra(font, 300, 385, 0, "4. Os valores precisam permanecer dentro do dominio jogavel.");
+    texto_com_sombra(font, 300, 440, 0, "5. ESPACO dispara; P/ESC pausa; R escolhe outra funcao.");
+    texto_com_sombra(font, 640, 535, ALLEGRO_ALIGN_CENTER, "ENTER ou ESC para voltar");
+}
+
+static void desenhar_tela_pausa(ALLEGRO_FONT* font)
+{
+    al_draw_filled_rounded_rectangle(430, 235, 850, 475, 12, 12,
+        al_map_rgba(0, 0, 0, 190));
+    desenhar_placa(440, 245, 840, 465);
+    texto_com_sombra(font, 640, 285, ALLEGRO_ALIGN_CENTER, "JOGO PAUSADO");
+    texto_com_sombra(font, 640, 350, ALLEGRO_ALIGN_CENTER, "ENTER / P / ESC = continuar");
+    texto_com_sombra(font, 640, 395, ALLEGRO_ALIGN_CENTER, "R = escolher outra funcao");
+}
+
 /*  INICIALIZACAO */
 int main(void)
 {
@@ -890,15 +1051,8 @@ int main(void)
     {
         FUNCAO_LINEAR,
         FUNCAO_QUADRATICA,
-        FUNCAO_LOGARITMICA,
+        FUNCAO_EXPONENCIAL,
         FUNCAO_TRIGONOMETRICA
-    };
-
-    static const char* erros_param[3] =
-    {
-        "Valor de A invalido.",
-        "Valor de B invalido.",
-        "Valor de C invalido."
     };
 
     if (!al_init())
@@ -939,30 +1093,20 @@ int main(void)
         ALLEGRO_MAG_LINEAR
     );
 
-    ALLEGRO_BITMAP* mage =
-        al_load_bitmap(
-            "./mage_spritesheet.png"
-        );
+    ALLEGRO_BITMAP* mage = carregar_bitmap_recurso("mage_spritesheet.png");
 
-    ALLEGRO_BITMAP* alvo_bmp =
-        al_load_bitmap(
-            "./alvo.png"
-        );
+    ALLEGRO_BITMAP* alvo_bmp = carregar_bitmap_recurso("alvo.png");
 
-    ALLEGRO_BITMAP* background =
-        al_load_bitmap(
-            "./background1.png"
-        );
+    ALLEGRO_BITMAP* background = carregar_bitmap_recurso("background1.png");
 
-    ALLEGRO_BITMAP* proj_bmp =
-        al_load_bitmap(
-            "./projetil.png"
-        );
+    ALLEGRO_BITMAP* proj_bmp = carregar_bitmap_recurso("projetil.png");
 
-    al_set_window_title(
-        display,
-        "Function Wars"
-    );
+    al_set_window_title(display, "Function Wars");
+
+    if (!mage) fprintf(stderr, "Aviso: nao foi possivel carregar mage_spritesheet.png\n");
+    if (!alvo_bmp) fprintf(stderr, "Aviso: nao foi possivel carregar alvo.png\n");
+    if (!background) fprintf(stderr, "Aviso: nao foi possivel carregar background1.png\n");
+    if (!proj_bmp) fprintf(stderr, "Aviso: nao foi possivel carregar projetil.png\n");
 
     al_register_event_source(
         fila,
@@ -1000,17 +1144,13 @@ int main(void)
         CHAO_Y -
         MAGO_ALTURA;
 
-    const float origem_x =
-        mago_x +
-        MAGO_LARGURA -
-        25.0f;
-
-    const float origem_y =
-        mago_y +
-        80.0f;
+    /* Ponta aproximada do cajado no quadro atual do sprite. Mantemos o
+       disparo dentro da area jogavel para nao prejudicar a colisao inicial. */
+    const float origem_x = mago_x + MAGO_LARGURA - 25.0f;
+    const float origem_y = mago_y + 80.0f;
 
     EstadoJogo estado =
-        TELA_ESCOLHA_FUNCAO;
+        TELA_INICIAL;
 
     TipoFuncao tipo_escolhido =
         FUNCAO_QUADRATICA;
@@ -1027,7 +1167,7 @@ int main(void)
     ParametrosFuncao funcao =
     {
         FUNCAO_QUADRATICA,
-        0.001f,
+        0.005f,
         0.0f,
         0.0f
     };
@@ -1085,7 +1225,7 @@ int main(void)
                 }
             }
 
-            if (projetil.ativo)
+            if (projetil.ativo && estado == TELA_JOGO)
             {
                 float x_ant =
                     projetil.x;
@@ -1093,19 +1233,16 @@ int main(void)
                 float y_ant =
                     projetil.y;
 
-                projetil.distancia +=
-                    VELOCIDADE_PROJETIL;
+                projetil.distancia += VELOCIDADE_PROJETIL;
 
-                projetil.x =
-                    origem_x +
-                    projetil.distancia;
+                projetil.x = origem_x + projetil.distancia;
+                projetil.y = origem_y - (calcular_y(projetil.distancia, funcao) -
+                    calcular_y(0.0f, funcao));
 
-                projetil.y =
-                    origem_y -
-                    calcular_y(
-                        projetil.distancia,
-                        funcao
-                    );
+                if (!isfinite(projetil.y) || projetil.y < -30.0f ||
+                    projetil.y > CHAO_Y || projetil.x > LARGURA_TELA + 50.0f) {
+                    projetil.ativo = false;
+                }
 
                 projetil.angulo =
                     atan2f(
@@ -1113,13 +1250,9 @@ int main(void)
                         projetil.x - x_ant
                     );
 
-                if (checar_colisao(
-                    projetil.x,
-                    projetil.y,
-                    RAIO_PROJETIL,
-                    alvo_cx,
-                    alvo_cy,
-                    alvo_raio))
+                if (projetil.ativo && colisao_segmento_circulo(
+                    x_ant, y_ant, projetil.x, projetil.y,
+                    alvo_cx, alvo_cy, alvo_raio + RAIO_PROJETIL))
                 {
                     projetil.ativo = false;
 
@@ -1144,11 +1277,6 @@ int main(void)
                     msg_ativa = true;
                 }
 
-                if (projetil.x >
-                    LARGURA_TELA + 50)
-                {
-                    projetil.ativo = false;
-                }
             }
 
             redraw = true;
@@ -1159,17 +1287,29 @@ int main(void)
             int tecla =
                 ev.keyboard.keycode;
 
-            if (estado ==
-                TELA_ESCOLHA_FUNCAO)
+            if (estado == TELA_INICIAL)
             {
-                if (tecla >= ALLEGRO_KEY_1 &&
-                    tecla <= ALLEGRO_KEY_4)
+                if (tecla == ALLEGRO_KEY_ESCAPE) executando = false;
+                else if (tecla == ALLEGRO_KEY_T) estado = TELA_TUTORIAL;
+                else if (tecla == ALLEGRO_KEY_ENTER || tecla == ALLEGRO_KEY_1)
+                    estado = TELA_ESCOLHA_FUNCAO;
+            }
+            else if (estado == TELA_TUTORIAL)
+            {
+                if (tecla == ALLEGRO_KEY_ENTER || tecla == ALLEGRO_KEY_ESCAPE)
+                    estado = TELA_INICIAL;
+            }
+            else if (estado == TELA_ESCOLHA_FUNCAO)
+            {
+                int indice = -1;
+                if (tecla >= ALLEGRO_KEY_1 && tecla <= ALLEGRO_KEY_4)
+                    indice = tecla - ALLEGRO_KEY_1;
+                else if (tecla >= ALLEGRO_KEY_PAD_1 && tecla <= ALLEGRO_KEY_PAD_4)
+                    indice = tecla - ALLEGRO_KEY_PAD_1;
+                if (tecla == ALLEGRO_KEY_ESCAPE) estado = TELA_INICIAL;
+                if (indice >= 0 && indice < 4)
                 {
-                    tipo_escolhido =
-                        tipos[
-                            tecla -
-                                ALLEGRO_KEY_1
-                        ];
+                    tipo_escolhido = tipos[indice];
 
                     entradas[0][0] = '\0';
                     entradas[1][0] = '\0';
@@ -1204,73 +1344,27 @@ int main(void)
                 else if (tecla ==
                     ALLEGRO_KEY_TAB)
                 {
-                    campo =
-                        (campo + 1) % 3;
+                    campo = proximo_campo(tipo_escolhido, campo);
                 }
-                else if (tecla ==
-                    ALLEGRO_KEY_ENTER)
+                else if (tecla == ALLEGRO_KEY_ENTER)
                 {
-                    float* destino[3] =
+                    ParametrosFuncao candidata;
+                    const char* motivo = NULL;
+                    if (montar_previa(tipo_escolhido, entradas, &candidata) &&
+                        validar_parametros(candidata, LARGURA_TELA - origem_x,
+                            &motivo))
                     {
-                        &funcao.a,
-                        &funcao.b,
-                        &funcao.c
-                    };
-
-                    bool opcional[3] =
-                    {
-                        false,
-                        tipo_escolhido ==
-                        FUNCAO_LOGARITMICA,
-                        tipo_escolhido !=
-                        FUNCAO_QUADRATICA
-                    };
-
-                    bool valido = true;
-
-                    for (int i = 0;
-                        i < 3 && valido;
-                        i++)
-                    {
-                        if (converter_float(
-                            entradas[i],
-                            destino[i]))
-                        {
-                            continue;
-                        }
-
-                        if (opcional[i])
-                        {
-                            *destino[i] =
-                                0.0f;
-                        }
-                        else
-                        {
-                            valido = false;
-                            msg =
-                                erros_param[i];
-                        }
-                    }
-
-                    if (valido)
-                    {
-                        funcao.tipo =
-                            tipo_escolhido;
-
-                        resetar_projetil(
-                            &projetil
-                        );
-
+                        funcao = candidata;
+                        resetar_projetil(&projetil);
                         vidas = 3;
                         msg_ativa = false;
-
-                        estado =
-                            TELA_JOGO;
+                        estado = TELA_JOGO;
                     }
                     else
                     {
+                        msg = motivo ? motivo : "Preencha todos os campos necessarios.";
                         msg_ativa = true;
-                        msg_tempo = 2.0f;
+                        msg_tempo = 4.0f;
                     }
                 }
                 else
@@ -1282,11 +1376,13 @@ int main(void)
                     );
                 }
             }
-            else if (estado ==
-                TELA_JOGO)
+            else if (estado == TELA_JOGO)
             {
-                if (tecla ==
-                    ALLEGRO_KEY_R)
+                if (tecla == ALLEGRO_KEY_ESCAPE || tecla == ALLEGRO_KEY_P)
+                {
+                    estado = TELA_PAUSA;
+                }
+                else if (tecla == ALLEGRO_KEY_R)
                 {
                     estado =
                         TELA_ESCOLHA_FUNCAO;
@@ -1308,6 +1404,18 @@ int main(void)
                     projetil.y = origem_y;
                 }
             }
+            else if (estado == TELA_PAUSA)
+            {
+                if (tecla == ALLEGRO_KEY_ENTER || tecla == ALLEGRO_KEY_P ||
+                    tecla == ALLEGRO_KEY_ESCAPE)
+                    estado = TELA_JOGO;
+                else if (tecla == ALLEGRO_KEY_R)
+                {
+                    estado = TELA_ESCOLHA_FUNCAO;
+                    resetar_projetil(&projetil);
+                    msg_ativa = false;
+                }
+            }
 
             redraw = true;
         }
@@ -1322,65 +1430,45 @@ int main(void)
                 background
             );
 
-            if (estado ==
-                TELA_JOGO ||
-                estado ==
-                TELA_PARAMETROS)
+            if (estado == TELA_JOGO || estado == TELA_PAUSA ||
+                estado == TELA_PARAMETROS)
             {
                 ParametrosFuncao previa;
 
-                if (estado ==
-                    TELA_JOGO)
+                if (estado == TELA_JOGO || estado == TELA_PAUSA)
                 {
                     previa = funcao;
                 }
                 else
                 {
-                    previa =
-                        (ParametrosFuncao)
-                    {
-                        tipo_escolhido,
-                        0.001f,
-                        0.0f,
-                        0.0f
-                    };
+                    if (!montar_previa(tipo_escolhido, entradas, &previa))
+                        previa = (ParametrosFuncao){ tipo_escolhido, 0.0f, 0.0f, 0.0f };
                 }
 
-                desenhar_trajetoria_atual(
-                    origem_x,
-                    origem_y,
-                    previa
-                );
+                if (estado == TELA_JOGO ||
+                    validar_parametros(previa, LARGURA_TELA - origem_x, NULL))
+                    desenhar_trajetoria_atual(origem_x, origem_y, previa);
             }
 
-            desenhar_mago(
-                mage,
-                mago_x,
-                mago_y,
-                frame
-            );
+            if (estado != TELA_INICIAL && estado != TELA_TUTORIAL) {
+                desenhar_mago(mage, mago_x, mago_y, frame);
+                desenhar_alvo(alvo_bmp, alvo_cx, alvo_cy, alvo_raio);
+                desenhar_projetil(proj_bmp, &projetil);
+            }
 
-            desenhar_alvo(
-                alvo_bmp,
-                alvo_cx,
-                alvo_cy,
-                alvo_raio
-            );
-
-            desenhar_projetil(
-                proj_bmp,
-                &projetil
-            );
-
-            if (estado ==
-                TELA_ESCOLHA_FUNCAO)
+            if (estado == TELA_INICIAL)
             {
-                desenhar_menu_escolha(
-                    font
-                );
+                desenhar_tela_inicial(font, mage, frame);
             }
-            else if (estado ==
-                TELA_PARAMETROS)
+            else if (estado == TELA_TUTORIAL)
+            {
+                desenhar_tela_tutorial(font);
+            }
+            else if (estado == TELA_ESCOLHA_FUNCAO)
+            {
+                desenhar_menu_escolha(font);
+            }
+            else if (estado == TELA_PARAMETROS)
             {
                 desenhar_menu_parametros(
                     font,
@@ -1400,9 +1488,10 @@ int main(void)
                 );
             }
 
-            if (estado ==
-                TELA_JOGO &&
-                msg_ativa)
+            if (estado == TELA_PAUSA)
+                desenhar_tela_pausa(font);
+
+            if (estado == TELA_JOGO && msg_ativa)
             {
                 al_draw_filled_rounded_rectangle(
                     506,
