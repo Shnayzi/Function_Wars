@@ -21,9 +21,6 @@
     <ClCompile Include="telaJogo.c">
       <Filter>Arquivos de Origem</Filter>
     </ClCompile>
-    <ClCompile Include="funcoes.c">
-      <Filter>Arquivos de Origem</Filter>
-    </ClCompile>
     <ClCompile Include="telaTutorial.c">
       <Filter>Arquivos de Origem</Filter>
     </ClCompile>
