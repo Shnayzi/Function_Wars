@@ -160,7 +160,6 @@
     <ClCompile Include="funcoes.c" />
     <ClCompile Include="telaJogo.c" />
     <ClCompile Include="main.c" />
-    <ClCompile Include="telaMenu.c" />
     <ClCompile Include="telaTutorial.c" />
   </ItemGroup>
   <ItemGroup>
@@ -169,8 +168,6 @@
   <ItemGroup>
     <ClInclude Include="funcoes.h" />
     <ClInclude Include="telaJogo.h" />
-    <ClInclude Include="telaMenu.h" />
-    <ClInclude Include="telaTutorial.h" />
   </ItemGroup>
   <ItemGroup>
     <Image Include="..\..\Function_Wars\Function_Wars\alvo.png" />
